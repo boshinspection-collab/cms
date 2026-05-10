@@ -544,31 +544,35 @@ function rPView(id){
 }
 let apSig=null;
 async function loadApprovalDropdowns(stL){
+  let users=null;
+  // Try loading users from API
   try{
     const u=await aGet('getUsers');
-    if(!u||!u.items||!u.items.length)return;
-    const users=u.items;
-    // PIC stage → show dropdown for EHS selection
-    if(stL==='pending_pic'){
-      const sel=document.getElementById('selEHS');
-      if(sel){users.forEach(x=>{
-        const o=document.createElement('option');
-        o.value=x.Username||x.username||'';
-        o.textContent=(x.Name||x.Username||'?')+' ('+( x.Role||'?')+') '+(x.Email||'');
-        sel.appendChild(o);
-      })}
-    }
-    // EHS stage → show dropdown for PM selection
-    if(stL==='pending_ehs'){
-      const sel=document.getElementById('selPM');
-      if(sel){users.forEach(x=>{
-        const o=document.createElement('option');
-        o.value=x.Username||x.username||'';
-        o.textContent=(x.Name||x.Username||'?')+' ('+(x.Role||'?')+') '+(x.Email||'');
-        sel.appendChild(o);
-      })}
-    }
-  }catch(e){console.warn('loadDropdowns error',e)}
+    if(u&&u.items&&u.items.length)users=u.items;
+  }catch(e){console.warn('getUsers failed',e)}
+  // Fallback demo users if API fails
+  if(!users||!users.length){
+    users=[
+      {Username:'supervisor',Name:'Supervisor',Role:'SUPERVISOR',Email:''},
+      {Username:'pic',Name:'PIC',Role:'PIC',Email:''},
+      {Username:'ehs',Name:'EHS Officer',Role:'EHS',Email:''},
+      {Username:'pm',Name:'Project Manager',Role:'PM',Email:''},
+      {Username:'admin',Name:'Admin',Role:'ADMIN',Email:''}
+    ];
+  }
+  // Fill ALL dropdowns that exist on the page
+  ['selEHS','selPM'].forEach(selId=>{
+    const sel=document.getElementById(selId);
+    if(!sel)return;
+    users.forEach(x=>{
+      const un=x.Username||x.username||'';
+      if(!un)return;
+      const o=document.createElement('option');
+      o.value=un;
+      o.textContent=(x.Name||un)+' ('+(x.Role||'?')+')'+(x.Email?' — '+x.Email:'');
+      sel.appendChild(o);
+    });
+  });
 }
 async function doApSign(id,stage,selId){
   // Validate next person selection (except PM final)
@@ -616,17 +620,72 @@ function dlPDF(id){
 
 // ======== PTW ANALYTICS ========
 async function rPAnalytics(){
-  document.getElementById('tT').textContent='PTW Analytics';document.getElementById('tA').innerHTML='';
-  sL('Loading...');const d=await aGet('getPTW');if(d&&d.items&&d.items.length){AP=d.items.map(normPTW)}else{AP=DP}hL();
-  const byTy={},bySt={};AP.forEach(p=>{byTy[p.type]=(byTy[p.type]||0)+1;bySt[p.status]=(bySt[p.status]||0)+1});
+  document.getElementById('tT').textContent='PTW Analytics';document.getElementById('tA').innerHTML='<button class="btn bs bsm" onclick="rPAnalytics()">↻ Refresh</button>';
+  sL('Loading analytics...');const d=await aGet('getPTW');if(d&&d.items&&d.items.length){AP=d.items.map(normPTW)}else{AP=DP}hL();
+  
+  const byTy={},bySt={},byPj={},byMo={};
+  const normS=s=>(s||'').toLowerCase().replace(/\s+/g,'_');
+  const pending=AP.filter(p=>normS(p.status).includes('pending')).length;
+  const active=AP.filter(p=>{const s=normS(p.status);return s==='active'||s==='approved'}).length;
+  const closed=AP.filter(p=>normS(p.status)==='closed').length;
+  const rejected=AP.filter(p=>{const s=normS(p.status);return s==='rejected'||s==='revoked'}).length;
+  
+  AP.forEach(p=>{
+    byTy[p.type||'Unknown']=(byTy[p.type||'Unknown']||0)+1;
+    const st=p.status||'Unknown';bySt[st]=(bySt[st]||0)+1;
+    const pj=p.project||'No Project';byPj[pj]=(byPj[pj]||0)+1;
+    // Monthly
+    if(p.startDate){try{const d=new Date(p.startDate);const k=d.toLocaleDateString('en-GB',{month:'short',year:'numeric'});byMo[k]=(byMo[k]||0)+1}catch(e){}}
+  });
+  
   document.getElementById('mc').innerHTML=`
-    <div class="hero2"><div style="width:44px;height:44px;border-radius:11px;background:var(--yelbg);display:flex;align-items:center;justify-content:center;font-size:20px">📋</div><div><h2>PTW Analytics</h2><p>Permit issuance, type distribution, and status overview.</p></div></div>
-    <div class="sr" style="grid-template-columns:repeat(4,1fr)"><div class="st cb"><div class="sv" data-v="${AP.length}">0</div><div class="sl2">Total</div></div><div class="st cg"><div class="sv" data-v="${AP.filter(p=>p.status==='Active'||p.status==='Approved').length}">0</div><div class="sl2">Active</div></div><div class="st co"><div class="sv" data-v="${AP.filter(p=>(p.status||'').startsWith('Pending')).length}">0</div><div class="sl2">Pending</div></div><div class="st cb"><div class="sv" data-v="${AP.filter(p=>p.status==='Closed').length}">0</div><div class="sl2">Closed</div></div></div>
-    <div class="g2"><div class="cc"><h3>By Type</h3><div class="cw"><canvas id="c1"></canvas></div></div><div class="cc"><h3>By Status</h3><div class="cw"><canvas id="c2"></canvas></div></div></div>`;
+    <div class="hero2"><div style="width:44px;height:44px;border-radius:11px;background:var(--yelbg);display:flex;align-items:center;justify-content:center;font-size:20px">📊</div><div><h2>PTW Analytics</h2><p>Comprehensive analysis of permits by project, type, status, and monthly trends.</p></div></div>
+    
+    <div class="sr" style="grid-template-columns:repeat(5,1fr)">
+      <div class="st cb"><div class="sv" data-v="${AP.length}">0</div><div class="sl2">Total PTWs</div></div>
+      <div class="st co"><div class="sv" data-v="${pending}">0</div><div class="sl2">Pending</div></div>
+      <div class="st cg"><div class="sv" data-v="${active}">0</div><div class="sl2">Active</div></div>
+      <div class="st cb"><div class="sv" data-v="${closed}">0</div><div class="sl2">Closed</div></div>
+      <div class="st cr"><div class="sv" data-v="${rejected}">0</div><div class="sl2">Rejected</div></div>
+    </div>
+    
+    <div class="g2">
+      <div class="cc"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">📋 By Permit Type</h3><div class="cw"><canvas id="c1"></canvas></div></div>
+      <div class="cc"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">📊 By Status</h3><div class="cw"><canvas id="c2"></canvas></div></div>
+    </div>
+    <div class="g2">
+      <div class="cc"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">🏗️ By Project</h3><div class="cw"><canvas id="c3"></canvas></div></div>
+      <div class="cc"><h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">📅 Monthly Trend</h3><div class="cw"><canvas id="c4"></canvas></div></div>
+    </div>
+    
+    <div class="tc"><div class="tb"><h3>Project-wise PTW Summary</h3></div>
+      <table class="dt"><thead><tr><th>Project</th><th>Total</th><th>Pending</th><th>Active</th><th>Closed</th><th>Rejected</th></tr></thead><tbody>
+        ${Object.keys(byPj).map(pj=>{
+          const pjPTW=AP.filter(p=>(p.project||'No Project')===pj);
+          const pPend=pjPTW.filter(p=>normS(p.status).includes('pending')).length;
+          const pAct=pjPTW.filter(p=>{const s=normS(p.status);return s==='active'||s==='approved'}).length;
+          const pClo=pjPTW.filter(p=>normS(p.status)==='closed').length;
+          const pRej=pjPTW.filter(p=>{const s=normS(p.status);return s==='rejected'||s==='revoked'}).length;
+          return '<tr><td style="font-weight:600;color:var(--navy)">'+pj+'</td><td>'+pjPTW.length+'</td><td style="color:var(--org)">'+pPend+'</td><td style="color:var(--grn)">'+pAct+'</td><td style="color:var(--blue)">'+pClo+'</td><td style="color:var(--red)">'+pRej+'</td></tr>';
+        }).join('')}
+      </tbody></table>
+    </div>`;
+  
   iR();iCU();
-  const pal=['#FBBF24','#EF4444','#3B82F6','#8B5CF6','#10B981','#1E3A5F'];
-  new Chart(document.getElementById('c1'),{type:'doughnut',data:{labels:Object.keys(byTy),datasets:[{data:Object.values(byTy),backgroundColor:pal,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{display:true,position:'right',labels:{boxWidth:7,padding:6,font:{size:9}}}}}});
-  new Chart(document.getElementById('c2'),{type:'doughnut',data:{labels:Object.keys(bySt),datasets:[{data:Object.values(bySt),backgroundColor:['#10B981','#F97316','#3B82F6','#EF4444','#1E3A5F','#8B5CF6'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{display:true,position:'right',labels:{boxWidth:7,padding:6,font:{size:9}}}}}});
+  const pal=['#FBBF24','#EF4444','#3B82F6','#8B5CF6','#10B981','#1E3A5F','#F97316','#06B6D4'];
+  // By Type — doughnut
+  new Chart(document.getElementById('c1'),{type:'doughnut',data:{labels:Object.keys(byTy),datasets:[{data:Object.values(byTy),backgroundColor:pal,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{display:true,position:'right',labels:{boxWidth:7,padding:6,font:{size:9}}}}}});
+  // By Status — doughnut
+  new Chart(document.getElementById('c2'),{type:'doughnut',data:{labels:Object.keys(bySt),datasets:[{data:Object.values(bySt),backgroundColor:['#10B981','#F97316','#3B82F6','#EF4444','#1E3A5F','#8B5CF6','#FBBF24'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{display:true,position:'right',labels:{boxWidth:7,padding:6,font:{size:9}}}}}});
+  // By Project — bar chart
+  new Chart(document.getElementById('c3'),{type:'bar',data:{labels:Object.keys(byPj),datasets:[{data:Object.values(byPj),backgroundColor:pal.map(c=>c+'33'),borderColor:pal,borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',scales:{x:{beginAtZero:true,grid:{color:'#F1F5F9'}},y:{grid:{display:false}}},plugins:{legend:{display:false}}}});
+  // Monthly — line chart
+  const moKeys=Object.keys(byMo);const moVals=Object.values(byMo);
+  if(moKeys.length){
+    const ctx=document.getElementById('c4').getContext('2d');
+    const grad=ctx.createLinearGradient(0,0,0,200);grad.addColorStop(0,'rgba(251,191,36,0.15)');grad.addColorStop(1,'rgba(255,255,255,0)');
+    new Chart(ctx,{type:'line',data:{labels:moKeys,datasets:[{data:moVals,borderColor:'#FBBF24',backgroundColor:grad,fill:true,borderWidth:2,pointRadius:4,pointBackgroundColor:'#FBBF24'}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,grid:{color:'#F1F5F9'}},x:{grid:{display:false}}},plugins:{legend:{display:false}}}});
+  }
 }
 
 // ======== PLACEHOLDER ========
