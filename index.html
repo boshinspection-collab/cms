@@ -445,8 +445,10 @@ async function subPTW(){
       const tc = document.createElement('canvas');
       const sc = document.getElementById('sigC');
       tc.width = 400; tc.height = 150;
-      tc.getContext('2d').drawImage(sc, 0, 0, 400, 150);
-      sigData = tc.toDataURL('image/jpeg', 0.5);
+      const ctx = tc.getContext('2d');
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, 400, 150);
+      ctx.drawImage(sc, 0, 0, 400, 150);
+      sigData = tc.toDataURL('image/png');
     } catch(e) { sigData = sigP.toDataURL(); }
   }
   // Ensure GPS is captured
@@ -578,12 +580,15 @@ async function doApSign(id,stage,selId){
   }
   // Validate signature
   if(!apSig||apSig.isEmpty()){toast('Please sign before approving','err');return}
-  // Compress signature
+  // Compress signature with WHITE background (not black)
   let sigData='';
   try{
-    const tc=document.createElement('canvas');const sc=document.getElementById('sigAp');
-    tc.width=400;tc.height=150;tc.getContext('2d').drawImage(sc,0,0,400,150);
-    sigData=tc.toDataURL('image/jpeg',0.5);
+    const sc=document.getElementById('sigAp');
+    const tc=document.createElement('canvas');tc.width=400;tc.height=150;
+    const ctx=tc.getContext('2d');
+    ctx.fillStyle='#FFFFFF';ctx.fillRect(0,0,400,150);
+    ctx.drawImage(sc,0,0,400,150);
+    sigData=tc.toDataURL('image/png');
   }catch(e){sigData=apSig.toDataURL()}
   sL('Approving...');
   await aPost('approvePTW',{id,stage,approver:U.username,nextAssignee:nextPerson,signature:sigData});
