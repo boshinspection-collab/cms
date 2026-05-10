@@ -532,9 +532,13 @@ function rPView(id){
   // Load user dropdowns + init signature pad
   loadApprovalDropdowns(stL);
   setTimeout(()=>{
-    const c=document.getElementById('sigAp');
-    if(c){apSig=new SP(c);apSig.resize()}
-  },500);
+    const canvas=document.getElementById('sigAp');
+    if(!canvas)return;
+    const rect=canvas.parentElement.getBoundingClientRect();
+    canvas.width=rect.width;
+    canvas.height=rect.height;
+    apSig=new SP(canvas);
+  },200);
 }
 let apSig=null;
 async function loadApprovalDropdowns(stL){
