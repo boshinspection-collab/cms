@@ -465,12 +465,25 @@ function rPView(id){
   let cl=[];try{cl=JSON.parse(p.checklist||'[]')}catch(e){}
   // Normalize status for comparison (handle pending_pic, Pending PIC, PENDING_PIC)
   const stL=(p.status||'').toLowerCase().replace(/\s+/g,'_');
-  // Action buttons based on role
+  // Action buttons — each approver must select the NEXT person
   let acts='';
-  if(stL==='pending_pic'&&(hR('pic','admin')||(p.pic||'').toLowerCase()===U.username.toLowerCase()))acts+=`<button class="btn bg" onclick="doAp('${id}','PIC')">✓ Approve as PIC</button> `;
-  if(stL==='pending_ehs'&&hR('ehs','safety','admin'))acts+=`<button class="btn bg" onclick="doAp('${id}','EHS')">✓ Approve as EHS</button> `;
-  if(stL==='pending_pm'&&hR('pm','project','admin'))acts+=`<button class="btn bg" onclick="doAp('${id}','PM')">✓ Final Approve (PM)</button> `;
-  if(stL.startsWith('pending'))acts+=`<button class="btn bd" onclick="doRj('${id}')">✕ Reject</button> `;
+  if(stL==='pending_pic'&&(hR('pic','admin')||(p.pic||'').toLowerCase()===U.username.toLowerCase())){
+    acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ PIC Approval</h3>
+      <div class="fg"><label>Assign to EHS Officer *</label><select class="fi" id="selEHS"><option value="">-- Select EHS --</option></select></div>
+      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn bg" onclick="doApNext('${id}','PIC','selEHS')">✓ Approve & Assign EHS</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
+    </div>`;
+  }
+  if(stL==='pending_ehs'&&hR('ehs','safety','admin')){
+    acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ EHS Approval</h3>
+      <div class="fg"><label>Assign to Project Manager *</label><select class="fi" id="selPM"><option value="">-- Select PM --</option></select></div>
+      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn bg" onclick="doApNext('${id}','EHS','selPM')">✓ Approve & Assign PM</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
+    </div>`;
+  }
+  if(stL==='pending_pm'&&hR('pm','project','admin')){
+    acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ PM Final Approval</h3>
+      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn bg" onclick="doAp('${id}','PM')">✓ Final Approve</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
+    </div>`;
+  }
   if((stL==='active'||stL==='approved')&&hR('pm','admin'))acts+=`<button class="btn bd" onclick="doRv('${id}')">⛔ Revoke</button> `;
   if((stL==='active'||stL==='approved')&&hR('supervisor','admin'))acts+=`<button class="btn bp" onclick="doCl('${id}')">Close PTW</button> `;
   if(hR('admin'))acts+=`<button class="btn bd bsm" onclick="doDelPTW('${id}')">🗑️ Delete</button> `;
@@ -494,6 +507,32 @@ function rPView(id){
       ${p.rejectionReason?`<div style="background:var(--redbg);border:1px solid rgba(239,68,68,.12);border-radius:var(--r);padding:8px;color:var(--red);font-size:11px;margin-top:10px"><strong>Rejected:</strong> ${p.rejectionReason}</div>`:''}
     </div>
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:14px">${acts}</div>`;
+  // Load user dropdowns for approval assignment
+  loadApprovalDropdowns(stL);
+}
+async function loadApprovalDropdowns(stL){
+  try{
+    const u=await aGet('getUsers');
+    if(!u||!u.items)return;
+    const users=u.items;
+    if(stL==='pending_pic'){
+      const sel=document.getElementById('selEHS');
+      if(sel)users.forEach(x=>{const rl=(x.Role||'').toUpperCase();const o=document.createElement('option');o.value=x.Username;o.textContent=x.Name+' ('+x.Role+')'+(x.Email?' — '+x.Email:'');sel.appendChild(o)});
+    }
+    if(stL==='pending_ehs'){
+      const sel=document.getElementById('selPM');
+      if(sel)users.forEach(x=>{const o=document.createElement('option');o.value=x.Username;o.textContent=x.Name+' ('+x.Role+')'+(x.Email?' — '+x.Email:'');sel.appendChild(o)});
+    }
+  }catch(e){}
+}
+async function doApNext(id,stage,selId){
+  const sel=document.getElementById(selId);
+  const nextPerson=sel?sel.value:'';
+  if(!nextPerson){toast('Please select the next approver','err');return}
+  sL('Approving...');
+  await aPost('approvePTW',{id,stage,approver:U.username,nextAssignee:nextPerson});
+  hL();toast('Approved & assigned to '+nextPerson+'!','ok');
+  const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id);
 }
 async function doAp(id,s){sL('Approving...');await aPost('approvePTW',{id,stage:s,approver:U.username});hL();toast('Approved!','ok');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
 async function doRj(id){const r=prompt('Rejection reason:');if(!r)return;sL('Rejecting...');await aPost('rejectPTW',{id,reason:r,rejectedBy:U.username});hL();toast('Rejected','warn');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
