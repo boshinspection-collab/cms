@@ -258,7 +258,7 @@ function sp(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove
 function toast(m,t='info'){let w=document.querySelector('.tw');if(!w){w=document.createElement('div');w.className='tw';document.body.appendChild(w)}const d=document.createElement('div');d.className='tm '+t;d.textContent=m;w.appendChild(d);setTimeout(()=>{d.style.opacity='0';setTimeout(()=>d.remove(),200)},3500)}
 function sL(t){let l=document.querySelector('.lo');if(!l){l=document.createElement('div');l.className='lo';l.innerHTML='<div class="spn"></div><p></p>';document.body.appendChild(l)}l.classList.remove('hi');l.querySelector('p').textContent=t||'Loading...'}
 function hL(){const l=document.querySelector('.lo');if(l)l.classList.add('hi')}
-function bdg(s){const l=(s||'').toLowerCase();if(['active','approved','completed','pass'].includes(l))return`<span class="badge bg2">${s}</span>`;if(l==='closed')return`<span class="badge bb">${s}</span>`;if(l.includes('pending')||l==='in progress'||l==='rectifying')return`<span class="badge bo">${s}</span>`;if(['expired','fail','rejected','revoked'].includes(l))return`<span class="badge br">${s}</span>`;return`<span class="badge bgr">${s}</span>`}
+function bdg(s){const l=(s||'').toLowerCase().replace(/\s+/g,'_');if(['active','approved','completed','pass'].includes(l))return`<span class="badge bg2">${s}</span>`;if(l==='closed')return`<span class="badge bb">${s}</span>`;if(l.includes('pending')||l==='in_progress'||l==='rectifying')return`<span class="badge bo">${s}</span>`;if(['expired','fail','rejected','revoked'].includes(l))return`<span class="badge br">${s}</span>`;return`<span class="badge bgr">${s}</span>`}
 function fD(d){if(!d)return'-';try{return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
 function iR(){const o=new IntersectionObserver(e=>{e.forEach((x,i)=>{if(x.isIntersecting){setTimeout(()=>x.target.classList.add('sh'),i*30);o.unobserve(x.target)}})},{threshold:.05});document.querySelectorAll('.st,.cc,.tc,.hero2').forEach(el=>o.observe(el))}
 function cU(el,v){const s=performance.now();(function t(n){const p=Math.min((n-s)/800,1);el.textContent=Math.floor(v*(1-Math.pow(1-p,3))).toLocaleString();if(p<1)requestAnimationFrame(t)})(s)}
@@ -269,19 +269,16 @@ function enterApp(){U=gU();if(!U){sp('pg-login');return}sp('pg-app');document.ge
 function go(p){document.querySelectorAll('.nl').forEach(n=>n.classList.remove('ac'));const n=document.querySelector(`.nl[data-p="${p}"]`);if(n)n.classList.add('ac');document.getElementById('sidebar').classList.remove('op');switch(p){case'dash':rDash();break;case'plist':rPList();break;case'pnew':rPForm();break;case'ptwA':rPAnalytics();break;default:rPH(p)}}
 function vPTW(id){rPView(id)}
 
-// isMyTask — fixed to work for all roles
+// isMyTask — handles both pending_pic and Pending PIC formats
 function isMyTask(p){
   const u=U.username.toLowerCase(),rl=U.role.toLowerCase();
-  // Admin sees everything
+  const stL=(p.status||'').toLowerCase().replace(/\s+/g,'_');
   if(rl.includes('admin'))return true;
-  // Supervisor sees their own submissions
   if((p.submittedBy||'').toLowerCase()===u)return true;
-  // PIC sees PTWs assigned to them that need PIC approval
-  if(p.status==='Pending PIC'&&(p.pic||'').toLowerCase()===u)return true;
-  // Safety sees PTWs needing EHS approval
-  if(p.status==='Pending EHS'&&rl.includes('safety'))return true;
-  // PM sees PTWs needing PM approval
-  if(p.status==='Pending PM'&&(rl.includes('pm')||rl.includes('project')))return true;
+  if(stL==='pending_pic'&&(p.pic||'').toLowerCase()===u)return true;
+  if(stL==='pending_pic'&&rl.includes('pic'))return true;
+  if(stL==='pending_ehs'&&(rl.includes('ehs')||rl.includes('safety')))return true;
+  if(stL==='pending_pm'&&(rl.includes('pm')||rl.includes('project')))return true;
   return false;
 }
 
@@ -289,7 +286,7 @@ function isMyTask(p){
 let dTab='mytasks',dSort='newest';
 async function rDash(){
   document.getElementById('tT').textContent='Dashboard';
-  document.getElementById('tA').innerHTML=hR('supervisor','admin')?'<button class="btn bp bsm" onclick="go(\'pnew\')">+ NEW PTW</button>':'';
+  document.getElementById('tA').innerHTML=(hR('supervisor','admin')?'<button class="btn bp bsm" onclick="go(\'pnew\')">+ NEW PTW</button> ':'')+(hR('admin')?'<button class="btn bd bsm" onclick="doResetDemo()">🗑️ Clear Demo</button> ':'');
   sL('Loading PTW data...');
   const d=await aGet('getPTW');
   if(d&&d.items&&d.items.length){AP=d.items.map(normPTW)}else{AP=DP}
@@ -306,11 +303,16 @@ async function rDash(){
 function sDT(b){document.querySelectorAll('.tgb').forEach(x=>x.classList.remove('ac'));b.classList.add('ac');rDL()}
 function rDL(){
   let ls=[...AP];
-  if(dTab==='mytasks')ls=ls.filter(isMyTask);else if(dTab==='pending')ls=ls.filter(p=>(p.status||'').startsWith('Pending'));else if(dTab==='active')ls=ls.filter(p=>p.status==='Active'||p.status==='Approved');else if(dTab==='closed')ls=ls.filter(p=>p.status==='Closed');else if(dTab==='rejected')ls=ls.filter(p=>p.status==='Rejected'||p.status==='Revoked');
+  const normSt=s=>(s||'').toLowerCase().replace(/\s+/g,'_');
+  if(dTab==='mytasks')ls=ls.filter(isMyTask);
+  else if(dTab==='pending')ls=ls.filter(p=>normSt(p.status).includes('pending'));
+  else if(dTab==='active')ls=ls.filter(p=>{const s=normSt(p.status);return s==='active'||s==='approved'});
+  else if(dTab==='closed')ls=ls.filter(p=>normSt(p.status)==='closed');
+  else if(dTab==='rejected')ls=ls.filter(p=>{const s=normSt(p.status);return s==='rejected'||s==='revoked'});
   ls.sort((a,b)=>dSort==='newest'?(b.startDate||'').localeCompare(a.startDate||''):(a.startDate||'').localeCompare(b.startDate||''));
   const el=document.getElementById('dL');
   if(!ls.length){el.innerHTML='<div class="emp"><div class="ei">✅</div><h3>No pending tasks!</h3><p>You have no pending actions.</p></div>';return}
-  el.innerHTML=ls.map(p=>{const isPend=(p.status||'').startsWith('Pending');return`<div class="pc"><div class="pcr" onclick="vPTW('${p.id}')"><div><div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span style="font-weight:700;color:var(--navy);font-size:13px">${p.id}</span>${bdg(p.status)}<span style="font-size:10px;color:var(--t3)">${p.type}</span></div><div style="font-size:10px;color:var(--t2)">${p.location} · ${p.company||''} · ${fD(p.startDate)}</div></div><div style="text-align:right;font-size:9px;color:var(--t3)">By: ${p.submittedBy||'-'}<br>${isPend?'<span style="color:var(--org);font-weight:600">Action Required →</span>':'View →'}</div></div></div>`}).join('');
+  el.innerHTML=ls.map(p=>{const isPend=normSt(p.status).includes('pending');return`<div class="pc"><div class="pcr" onclick="vPTW('${p.id}')"><div><div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span style="font-weight:700;color:var(--navy);font-size:13px">${p.id}</span>${bdg(p.status)}<span style="font-size:10px;color:var(--t3)">${p.type}</span></div><div style="font-size:10px;color:var(--t2)">${p.location} · ${p.company||''} · ${fD(p.startDate)}</div></div><div style="text-align:right;font-size:9px;color:var(--t3)">By: ${p.submittedBy||'-'}<br>${isPend?'<span style="color:var(--org);font-weight:600">Action Required →</span>':'View →'}</div></div></div>`}).join('');
 }
 
 // ======== PTW LIST ========
@@ -461,14 +463,17 @@ function rPView(id){
   document.getElementById('tT').textContent=p.id+' — '+p.type;document.getElementById('tA').innerHTML='<button class="btn bs bsm" onclick="go(\'dash\')">← Back</button>';
   const ap=(p.approvals||'').split('|').filter(Boolean).map(a=>{const x=a.split(':');return{stage:x[0],by:x[1],at:x[2]}});
   let cl=[];try{cl=JSON.parse(p.checklist||'[]')}catch(e){}
+  // Normalize status for comparison (handle pending_pic, Pending PIC, PENDING_PIC)
+  const stL=(p.status||'').toLowerCase().replace(/\s+/g,'_');
   // Action buttons based on role
-  let acts='';const st=p.status;
-  if(st==='Pending PIC'&&(hR('pic','admin')||(p.pic||'').toLowerCase()===U.username.toLowerCase()))acts+=`<button class="btn bg" onclick="doAp('${id}','PIC')">✓ Approve as PIC</button> `;
-  if(st==='Pending EHS'&&hR('safety','admin'))acts+=`<button class="btn bg" onclick="doAp('${id}','EHS')">✓ Approve as EHS</button> `;
-  if(st==='Pending PM'&&hR('pm','project','admin'))acts+=`<button class="btn bg" onclick="doAp('${id}','PM')">✓ Final Approve (PM)</button> `;
-  if(st.startsWith('Pending'))acts+=`<button class="btn bd" onclick="doRj('${id}')">✕ Reject</button> `;
-  if((st==='Active'||st==='Approved')&&hR('pm','admin'))acts+=`<button class="btn bd" onclick="doRv('${id}')">⛔ Revoke</button> `;
-  if((st==='Active'||st==='Approved')&&hR('supervisor','admin'))acts+=`<button class="btn bp" onclick="doCl('${id}')">Close PTW</button> `;
+  let acts='';
+  if(stL==='pending_pic'&&(hR('pic','admin')||(p.pic||'').toLowerCase()===U.username.toLowerCase()))acts+=`<button class="btn bg" onclick="doAp('${id}','PIC')">✓ Approve as PIC</button> `;
+  if(stL==='pending_ehs'&&hR('ehs','safety','admin'))acts+=`<button class="btn bg" onclick="doAp('${id}','EHS')">✓ Approve as EHS</button> `;
+  if(stL==='pending_pm'&&hR('pm','project','admin'))acts+=`<button class="btn bg" onclick="doAp('${id}','PM')">✓ Final Approve (PM)</button> `;
+  if(stL.startsWith('pending'))acts+=`<button class="btn bd" onclick="doRj('${id}')">✕ Reject</button> `;
+  if((stL==='active'||stL==='approved')&&hR('pm','admin'))acts+=`<button class="btn bd" onclick="doRv('${id}')">⛔ Revoke</button> `;
+  if((stL==='active'||stL==='approved')&&hR('supervisor','admin'))acts+=`<button class="btn bp" onclick="doCl('${id}')">Close PTW</button> `;
+  if(hR('admin'))acts+=`<button class="btn bd bsm" onclick="doDelPTW('${id}')">🗑️ Delete</button> `;
   acts+=`<button class="btn bs" onclick="dlPDF('${id}')">📄 Download PDF</button>`;
   document.getElementById('mc').innerHTML=`
     <a href="#" onclick="go('dash');return false" style="font-size:10px;color:var(--t3)">← Back</a>
@@ -484,7 +489,7 @@ function rPView(id){
     <div class="fsec"><h3>📝 Approval Trail</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <div style="text-align:center;padding:8px 14px;background:var(--bg);border-radius:var(--r);min-width:80px"><div style="font-size:9px;color:var(--t3);margin-bottom:2px">Submitted</div><div style="font-weight:600;color:var(--navy);font-size:12px">${p.submittedBy||'-'}</div></div>
-        ${['PIC','EHS','PM'].map(s=>{const a=ap.find(x=>x.stage===s);const ip=p.status==='Pending '+s;return`<div style="color:var(--t3);font-size:16px">→</div><div style="text-align:center;padding:8px 14px;background:${a?'var(--grnbg)':ip?'var(--orgbg)':'var(--bg)'};border-radius:var(--r);min-width:80px;border:1px solid ${a?'rgba(16,185,129,.12)':ip?'rgba(249,115,22,.12)':'var(--brd)'}"><div style="font-size:9px;color:var(--t3);margin-bottom:2px">${s}</div><div style="font-weight:600;font-size:12px;color:${a?'var(--grn)':ip?'var(--org)':'var(--t3)'}">${a?'✓ '+a.by:ip?'⏳ Pending':'—'}</div>${a&&a.at?`<div style="font-size:8px;color:var(--t3)">${fD(a.at)}</div>`:''}</div>`}).join('')}
+        ${['PIC','EHS','PM'].map(s=>{const a=ap.find(x=>x.stage===s);const ip=stL==='pending_'+s.toLowerCase();return`<div style="color:var(--t3);font-size:16px">→</div><div style="text-align:center;padding:8px 14px;background:${a?'var(--grnbg)':ip?'var(--orgbg)':'var(--bg)'};border-radius:var(--r);min-width:80px;border:1px solid ${a?'rgba(16,185,129,.12)':ip?'rgba(249,115,22,.12)':'var(--brd)'}"><div style="font-size:9px;color:var(--t3);margin-bottom:2px">${s}</div><div style="font-weight:600;font-size:12px;color:${a?'var(--grn)':ip?'var(--org)':'var(--t3)'}">${a?'✓ '+a.by:ip?'⏳ Pending':'—'}</div>${a&&a.at?`<div style="font-size:8px;color:var(--t3)">${fD(a.at)}</div>`:''}</div>`}).join('')}
       </div>
       ${p.rejectionReason?`<div style="background:var(--redbg);border:1px solid rgba(239,68,68,.12);border-radius:var(--r);padding:8px;color:var(--red);font-size:11px;margin-top:10px"><strong>Rejected:</strong> ${p.rejectionReason}</div>`:''}
     </div>
@@ -494,6 +499,8 @@ async function doAp(id,s){sL('Approving...');await aPost('approvePTW',{id,stage:
 async function doRj(id){const r=prompt('Rejection reason:');if(!r)return;sL('Rejecting...');await aPost('rejectPTW',{id,reason:r,rejectedBy:U.username});hL();toast('Rejected','warn');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
 async function doRv(id){if(!confirm('⛔ REVOKE? Stops ALL work.'))return;sL('Revoking...');await aPost('revokePTW',{id,revokedBy:U.username});hL();toast('Revoked','warn');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
 async function doCl(id){sL('Closing...');await aPost('closePTW',{id,closedBy:U.username});hL();toast('Closed','ok');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
+async function doDelPTW(id){if(!confirm('🗑️ DELETE PTW '+id+'? This cannot be undone.'))return;sL('Deleting...');await aPost('deletePTW',{id});hL();toast('Deleted','warn');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;go('dash')}
+async function doResetDemo(){if(!confirm('⚠️ This will delete ALL demo PTW data (PTW-001 to PTW-005). Real data will stay. Continue?'))return;sL('Clearing demo data...');AP=AP.filter(p=>!p.id.startsWith('PTW-00'));toast('Demo data cleared from view','ok');hL();rDL()}
 
 // ======== PDF DOWNLOAD ========
 function dlPDF(id){
