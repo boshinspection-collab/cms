@@ -481,20 +481,20 @@ function rPView(id){
   if(stL==='pending_pic'&&(hR('pic','admin')||(p.pic||'').toLowerCase()===U.username.toLowerCase())){
     acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ PIC Approval</h3>
       <div class="fg"><label>Assign to EHS Officer *</label><select class="fi" id="selEHS"><option value="">-- Select EHS Officer --</option></select></div>
-      <div class="fg" style="margin-top:8px"><label>PIC Signature *</label><div class="sp"><canvas id="sigAp"></canvas><button class="sc" onclick="apSig&&apSig.clear()">Clear</button></div></div>
+      <div class="fg" style="margin-top:8px"><label>PIC Signature *</label><div class="sigbox"><canvas id="sigAp"></canvas><button class="sigclr" onclick="apSig&&apSig.clear()">Clear</button></div></div>
       <div style="display:flex;gap:6px;margin-top:10px"><button class="btn bg" onclick="doApSign('${id}','PIC','selEHS')">✓ Approve & Assign EHS</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
     </div>`;
   }
   if(stL==='pending_ehs'&&hR('ehs','safety','admin')){
     acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ EHS Approval</h3>
       <div class="fg"><label>Assign to Project Manager *</label><select class="fi" id="selPM"><option value="">-- Select PM --</option></select></div>
-      <div class="fg" style="margin-top:8px"><label>EHS Signature *</label><div class="sp"><canvas id="sigAp"></canvas><button class="sc" onclick="apSig&&apSig.clear()">Clear</button></div></div>
+      <div class="fg" style="margin-top:8px"><label>EHS Signature *</label><div class="sigbox"><canvas id="sigAp"></canvas><button class="sigclr" onclick="apSig&&apSig.clear()">Clear</button></div></div>
       <div style="display:flex;gap:6px;margin-top:10px"><button class="btn bg" onclick="doApSign('${id}','EHS','selPM')">✓ Approve & Assign PM</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
     </div>`;
   }
   if(stL==='pending_pm'&&hR('pm','project','admin')){
     acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ PM Final Approval</h3>
-      <div class="fg"><label>PM Signature *</label><div class="sp"><canvas id="sigAp"></canvas><button class="sc" onclick="apSig&&apSig.clear()">Clear</button></div></div>
+      <div class="fg"><label>PM Signature *</label><div class="sigbox"><canvas id="sigAp"></canvas><button class="sigclr" onclick="apSig&&apSig.clear()">Clear</button></div></div>
       <div style="display:flex;gap:6px;margin-top:10px"><button class="btn bg" onclick="doApSign('${id}','PM',null)">✓ Final Approve</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
     </div>`;
   }
@@ -531,7 +531,10 @@ function rPView(id){
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:14px">${acts}</div>`;
   // Load user dropdowns + init signature pad
   loadApprovalDropdowns(stL);
-  setTimeout(()=>{apSig=new SigPad('sigAp')},300);
+  setTimeout(()=>{
+    const c=document.getElementById('sigAp');
+    if(c){apSig=new SP(c);apSig.resize()}
+  },500);
 }
 let apSig=null;
 async function loadApprovalDropdowns(stL){
@@ -581,7 +584,8 @@ async function doApSign(id,stage,selId){
   sL('Approving...');
   await aPost('approvePTW',{id,stage,approver:U.username,nextAssignee:nextPerson,signature:sigData});
   hL();toast('Approved!'+(nextPerson?' Assigned to '+nextPerson:''),'ok');
-  setTimeout(()=>go('dash'),800);
+  dTab='mytasks';
+  setTimeout(()=>go('dash'),600);
 }
 async function doAp(id,s){sL('Approving...');await aPost('approvePTW',{id,stage:s,approver:U.username});hL();toast('Approved!','ok');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
 async function doRj(id){const r=prompt('Rejection reason:');if(!r)return;sL('Rejecting...');await aPost('rejectPTW',{id,reason:r,rejectedBy:U.username});hL();toast('Rejected','warn');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
@@ -621,10 +625,11 @@ function rPH(p){document.getElementById('tT').textContent=p;document.getElementB
 
 // ======== SIGNATURE PAD CLASS ========
 class SP{
-  constructor(c){this.c=c;this.x=c.getContext('2d');this.d=false;
+  constructor(c){this.c=c;this.x=c.getContext('2d');this.d=false;this.resize();
     c.addEventListener('mousedown',e=>this.s(e));c.addEventListener('mousemove',e=>this.m(e));c.addEventListener('mouseup',()=>this.d=false);c.addEventListener('mouseleave',()=>this.d=false);
     c.addEventListener('touchstart',e=>{e.preventDefault();this.s(e.touches[0])});c.addEventListener('touchmove',e=>{e.preventDefault();this.m(e.touches[0])});c.addEventListener('touchend',()=>this.d=false);
   }
+  resize(){const r=this.c.getBoundingClientRect();this.c.width=r.width;this.c.height=r.height}
   s(e){this.d=true;const r=this.c.getBoundingClientRect();this.x.beginPath();this.x.moveTo(e.clientX-r.left,e.clientY-r.top)}
   m(e){if(!this.d)return;const r=this.c.getBoundingClientRect();this.x.lineTo(e.clientX-r.left,e.clientY-r.top);this.x.strokeStyle='#1E3A5F';this.x.lineWidth=2;this.x.lineCap='round';this.x.stroke()}
   clear(){this.x.clearRect(0,0,this.c.width,this.c.height)}
