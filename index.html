@@ -465,23 +465,26 @@ function rPView(id){
   let cl=[];try{cl=JSON.parse(p.checklist||'[]')}catch(e){}
   // Normalize status for comparison (handle pending_pic, Pending PIC, PENDING_PIC)
   const stL=(p.status||'').toLowerCase().replace(/\s+/g,'_');
-  // Action buttons — each approver must select the NEXT person
+  // Action buttons — each approver signs + selects next person
   let acts='';
   if(stL==='pending_pic'&&(hR('pic','admin')||(p.pic||'').toLowerCase()===U.username.toLowerCase())){
     acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ PIC Approval</h3>
-      <div class="fg"><label>Assign to EHS Officer *</label><select class="fi" id="selEHS"><option value="">-- Select EHS --</option></select></div>
-      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn bg" onclick="doApNext('${id}','PIC','selEHS')">✓ Approve & Assign EHS</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
+      <div class="fg"><label>Assign to EHS Officer *</label><select class="fi" id="selEHS"><option value="">-- Select EHS Officer --</option></select></div>
+      <div class="fg" style="margin-top:8px"><label>PIC Signature *</label><div class="sp"><canvas id="sigAp"></canvas><button class="sc" onclick="apSig&&apSig.clear()">Clear</button></div></div>
+      <div style="display:flex;gap:6px;margin-top:10px"><button class="btn bg" onclick="doApSign('${id}','PIC','selEHS')">✓ Approve & Assign EHS</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
     </div>`;
   }
   if(stL==='pending_ehs'&&hR('ehs','safety','admin')){
     acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ EHS Approval</h3>
       <div class="fg"><label>Assign to Project Manager *</label><select class="fi" id="selPM"><option value="">-- Select PM --</option></select></div>
-      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn bg" onclick="doApNext('${id}','EHS','selPM')">✓ Approve & Assign PM</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
+      <div class="fg" style="margin-top:8px"><label>EHS Signature *</label><div class="sp"><canvas id="sigAp"></canvas><button class="sc" onclick="apSig&&apSig.clear()">Clear</button></div></div>
+      <div style="display:flex;gap:6px;margin-top:10px"><button class="btn bg" onclick="doApSign('${id}','EHS','selPM')">✓ Approve & Assign PM</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
     </div>`;
   }
   if(stL==='pending_pm'&&hR('pm','project','admin')){
     acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--grn);"><h3 style="color:var(--grn)">✓ PM Final Approval</h3>
-      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn bg" onclick="doAp('${id}','PM')">✓ Final Approve</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
+      <div class="fg"><label>PM Signature *</label><div class="sp"><canvas id="sigAp"></canvas><button class="sc" onclick="apSig&&apSig.clear()">Clear</button></div></div>
+      <div style="display:flex;gap:6px;margin-top:10px"><button class="btn bg" onclick="doApSign('${id}','PM',null)">✓ Final Approve</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
     </div>`;
   }
   if((stL==='active'||stL==='approved')&&hR('pm','admin'))acts+=`<button class="btn bd" onclick="doRv('${id}')">⛔ Revoke</button> `;
@@ -507,31 +510,58 @@ function rPView(id){
       ${p.rejectionReason?`<div style="background:var(--redbg);border:1px solid rgba(239,68,68,.12);border-radius:var(--r);padding:8px;color:var(--red);font-size:11px;margin-top:10px"><strong>Rejected:</strong> ${p.rejectionReason}</div>`:''}
     </div>
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:14px">${acts}</div>`;
-  // Load user dropdowns for approval assignment
+  // Load user dropdowns + init signature pad
   loadApprovalDropdowns(stL);
+  setTimeout(()=>{apSig=new SigPad('sigAp')},300);
 }
+let apSig=null;
 async function loadApprovalDropdowns(stL){
   try{
     const u=await aGet('getUsers');
-    if(!u||!u.items)return;
+    if(!u||!u.items||!u.items.length)return;
     const users=u.items;
+    // PIC stage → show dropdown for EHS selection
     if(stL==='pending_pic'){
       const sel=document.getElementById('selEHS');
-      if(sel)users.forEach(x=>{const rl=(x.Role||'').toUpperCase();const o=document.createElement('option');o.value=x.Username;o.textContent=x.Name+' ('+x.Role+')'+(x.Email?' — '+x.Email:'');sel.appendChild(o)});
+      if(sel){users.forEach(x=>{
+        const o=document.createElement('option');
+        o.value=x.Username||x.username||'';
+        o.textContent=(x.Name||x.Username||'?')+' ('+( x.Role||'?')+') '+(x.Email||'');
+        sel.appendChild(o);
+      })}
     }
+    // EHS stage → show dropdown for PM selection
     if(stL==='pending_ehs'){
       const sel=document.getElementById('selPM');
-      if(sel)users.forEach(x=>{const o=document.createElement('option');o.value=x.Username;o.textContent=x.Name+' ('+x.Role+')'+(x.Email?' — '+x.Email:'');sel.appendChild(o)});
+      if(sel){users.forEach(x=>{
+        const o=document.createElement('option');
+        o.value=x.Username||x.username||'';
+        o.textContent=(x.Name||x.Username||'?')+' ('+(x.Role||'?')+') '+(x.Email||'');
+        sel.appendChild(o);
+      })}
     }
-  }catch(e){}
+  }catch(e){console.warn('loadDropdowns error',e)}
 }
-async function doApNext(id,stage,selId){
-  const sel=document.getElementById(selId);
-  const nextPerson=sel?sel.value:'';
-  if(!nextPerson){toast('Please select the next approver','err');return}
+async function doApSign(id,stage,selId){
+  // Validate next person selection (except PM final)
+  let nextPerson='';
+  if(selId){
+    const sel=document.getElementById(selId);
+    nextPerson=sel?sel.value:'';
+    if(!nextPerson){toast('Please select the next approver','err');return}
+  }
+  // Validate signature
+  if(!apSig||apSig.isEmpty()){toast('Please sign before approving','err');return}
+  // Compress signature
+  let sigData='';
+  try{
+    const tc=document.createElement('canvas');const sc=document.getElementById('sigAp');
+    tc.width=400;tc.height=150;tc.getContext('2d').drawImage(sc,0,0,400,150);
+    sigData=tc.toDataURL('image/jpeg',0.5);
+  }catch(e){sigData=apSig.toDataURL()}
   sL('Approving...');
-  await aPost('approvePTW',{id,stage,approver:U.username,nextAssignee:nextPerson});
-  hL();toast('Approved & assigned to '+nextPerson+'!','ok');
+  await aPost('approvePTW',{id,stage,approver:U.username,nextAssignee:nextPerson,signature:sigData});
+  hL();toast('Approved!'+(nextPerson?' Assigned to '+nextPerson:''),'ok');
   const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id);
 }
 async function doAp(id,s){sL('Approving...');await aPost('approvePTW',{id,stage:s,approver:U.username});hL();toast('Approved!','ok');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
