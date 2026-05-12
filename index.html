@@ -420,7 +420,16 @@ async function ldCL(){
       <td><div class="co"><label><input type="radio" name="c${i}" value="Others" onchange="document.getElementById('oi${i}').classList.add('show');document.getElementById('oi${i}').focus()"><span>OTHERS</span></label></div></td>
     </tr>`).join('')}</tbody></table>`;
 }
-function gGPS(){const b=document.getElementById('gB');b.textContent='📍 GPS: Fetching...';b.style.background='var(--yelbg)';b.style.color='#B45309';if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{gps=p.coords.latitude.toFixed(6)+', '+p.coords.longitude.toFixed(6);b.innerHTML='✅ GPS Ready: '+gps+' (±'+Math.round(p.coords.accuracy)+'m) <a href="https://maps.google.com/?q='+gps+'" target="_blank" style="color:var(--red);margin-left:4px">📍 Map</a>';b.style.background='var(--grnbg)';b.style.color='var(--grn)'},()=>{b.textContent='⚠ GPS unavailable';b.style.background='var(--redbg)';b.style.color='var(--red)';gps='unavailable'},{enableHighAccuracy:true,timeout:10000})}else{b.textContent='⚠ GPS not supported';gps='N/A'}}
+function gGPS(){const b=document.getElementById('gB');b.textContent='📍 GPS: Fetching location...';b.style.background='var(--yelbg)';b.style.color='#B45309';
+if(navigator.geolocation){navigator.geolocation.getCurrentPosition(async p=>{
+  const lat=p.coords.latitude.toFixed(6),lng=p.coords.longitude.toFixed(6),coords=lat+', '+lng;
+  let locName='';
+  try{const r=await fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lng+'&format=json&zoom=16');const d=await r.json();locName=d.display_name||''}catch(e){}
+  gps=coords+(locName?' | '+locName:'');
+  b.innerHTML='✅ GPS Ready: '+coords+(locName?'<br><span style="font-size:10px;font-weight:400;color:var(--t2)">📍 '+locName+'</span>':'')+' <a href="https://maps.google.com/?q='+coords+'" target="_blank" style="color:var(--red);margin-left:4px">🗺️ Map</a>';
+  b.style.background='var(--grnbg)';b.style.color='var(--grn)'
+},()=>{b.textContent='⚠ GPS unavailable — enable location';b.style.background='var(--redbg)';b.style.color='var(--red)';gps='unavailable'},{enableHighAccuracy:true,timeout:10000})
+}else{b.textContent='⚠ GPS not supported';gps='N/A'}}
 
 async function subPTW(){
   const ty=document.getElementById('fTy').value,lo=document.getElementById('fLo').value,pi=document.getElementById('fPI').value;
@@ -500,14 +509,18 @@ function rPView(id){
       <div style="display:flex;gap:6px;margin-top:10px"><button class="btn bg" onclick="doApSign('${id}','PM',null)">✓ Final Approve</button><button class="btn bd" onclick="doRj('${id}')">✕ Reject</button></div>
     </div>`;
   }
-  if((stL==='active'||stL==='approved')&&hR('pm','admin')){}
-  if((stL==='active'||stL==='approved')&&hR('supervisor','admin')){}
-  if(hR('admin')){}
-  // PDF button already in topActs
-  // Top action bar — Revoke, Close, Delete always visible at top for authorized users
+  // Close PTW needs signature
+  if((stL==='active'||stL==='approved')&&hR('supervisor','admin')){
+    acts+=`<div class="fsec" style="margin-top:12px;border:2px solid var(--blue);"><h3 style="color:var(--blue)">📋 Close PTW</h3>
+      <p style="font-size:11px;color:var(--t2);margin-bottom:8px">Confirm work is completed and close this permit.</p>
+      <div class="fg"><label>Closing Signature *</label><div class="sigbox"><canvas id="sigClose"></canvas><button class="sigclr" onclick="closeSig&&closeSig.clear()">Clear</button></div></div>
+      <div style="display:flex;gap:6px;margin-top:10px"><button class="btn bp" onclick="doCloseSign('${id}')">✓ Close PTW</button></div>
+    </div>`;
+  }
+
+  // Top action bar
   let topActs='';
   if((stL==='active'||stL==='approved')&&hR('pm','admin'))topActs+=`<button class="btn bd" onclick="doRv('${p.id}')" style="font-size:13px;padding:10px 20px">⛔ REVOKE (Stop Work)</button> `;
-  if((stL==='active'||stL==='approved')&&hR('supervisor','admin'))topActs+=`<button class="btn bp" onclick="doCl('${p.id}')">Close PTW</button> `;
   if(hR('admin'))topActs+=`<button class="btn bd bsm" onclick="doDelPTW('${p.id}')">🗑️ Delete</button> `;
   topActs+=`<button class="btn bs" onclick="dlPDF('${p.id}')">📄 Download PDF</button>`;
 
@@ -531,18 +544,18 @@ function rPView(id){
       ${p.rejectionReason?`<div style="background:var(--redbg);border:1px solid rgba(239,68,68,.12);border-radius:var(--r);padding:8px;color:var(--red);font-size:11px;margin-top:10px"><strong>Rejected:</strong> ${p.rejectionReason}</div>`:''}
     </div>
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:14px">${acts}</div>`;
-  // Load user dropdowns + init signature pad
+  // Load user dropdowns + init signature pads
   loadApprovalDropdowns(stL);
   setTimeout(()=>{
+    // Approval signature
     const canvas=document.getElementById('sigAp');
-    if(!canvas)return;
-    const rect=canvas.parentElement.getBoundingClientRect();
-    canvas.width=rect.width;
-    canvas.height=rect.height;
-    apSig=new SP(canvas);
+    if(canvas){const rect=canvas.parentElement.getBoundingClientRect();canvas.width=rect.width;canvas.height=rect.height;apSig=new SP(canvas)}
+    // Close signature
+    const cc=document.getElementById('sigClose');
+    if(cc){const rect2=cc.parentElement.getBoundingClientRect();cc.width=rect2.width;cc.height=rect2.height;closeSig=new SP(cc)}
   },200);
 }
-let apSig=null;
+let apSig=null,closeSig=null;
 async function loadApprovalDropdowns(stL){
   let users=null;
   // Try loading users from API
@@ -603,7 +616,16 @@ async function doApSign(id,stage,selId){
 async function doAp(id,s){sL('Approving...');await aPost('approvePTW',{id,stage:s,approver:U.username});hL();toast('Approved!','ok');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
 async function doRj(id){const r=prompt('Rejection reason:');if(!r)return;sL('Rejecting...');await aPost('rejectPTW',{id,reason:r,rejectedBy:U.username});hL();toast('Rejected','warn');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
 async function doRv(id){if(!confirm('⛔ REVOKE? Stops ALL work.'))return;sL('Revoking...');await aPost('revokePTW',{id,revokedBy:U.username});hL();toast('Revoked','warn');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
-async function doCl(id){sL('Closing...');await aPost('closePTW',{id,closedBy:U.username});hL();toast('Closed','ok');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;vPTW(id)}
+async function doCl(id){sL('Closing...');await aPost('closePTW',{id,closedBy:U.username});hL();toast('Closed','ok');dTab='mytasks';setTimeout(()=>go('dash'),600)}
+async function doCloseSign(id){
+  if(!closeSig||closeSig.isEmpty()){toast('Please sign before closing','err');return}
+  let sigData='';
+  try{const sc=document.getElementById('sigClose');const tc=document.createElement('canvas');tc.width=400;tc.height=150;const ctx=tc.getContext('2d');ctx.fillStyle='#FFFFFF';ctx.fillRect(0,0,400,150);ctx.drawImage(sc,0,0,400,150);sigData=tc.toDataURL('image/png')}catch(e){sigData=closeSig.toDataURL()}
+  sL('Closing PTW...');
+  await aPost('closePTW',{id,closedBy:U.username,signature:sigData});
+  hL();toast('PTW Closed successfully!','ok');
+  dTab='mytasks';setTimeout(()=>go('dash'),600);
+}
 async function doDelPTW(id){if(!confirm('🗑️ DELETE PTW '+id+'? This cannot be undone.'))return;sL('Deleting...');await aPost('deletePTW',{id});hL();toast('Deleted','warn');const d=await aGet('getPTW');AP=(d&&d.items)?d.items.map(normPTW):DP;go('dash')}
 async function doResetDemo(){if(!confirm('⚠️ This will delete ALL demo PTW data (PTW-001 to PTW-005). Real data will stay. Continue?'))return;sL('Clearing demo data...');AP=AP.filter(p=>!p.id.startsWith('PTW-00'));toast('Demo data cleared from view','ok');hL();rDL()}
 
